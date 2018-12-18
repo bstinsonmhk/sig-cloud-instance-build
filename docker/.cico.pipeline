@@ -1,0 +1,66 @@
+def c7arches = ["x86_64", "aarch64", "armhfp", "i386", "ppc64le"]
+def c6arches = ["x86_64", "i386"]
+def stages[:]
+
+c7arches.each { arch -> 
+    stages["c7-$arch"] = {
+        stage("c7-$arch") {
+            try{
+                stage ("Allocate node"){
+                    env.CICO_API_KEY = readFile("${env.HOME}/duffy.key").trim()
+                    duffy_rtn=sh(
+                                script: "cico --debug node get -a ${arch} -f value -c hostname -c comment",
+                                returnStdout: true
+                                ).trim().tokenize(' ')
+                    env.DUFFY_NODE=duffy_rtn[0]
+                    env.DUFFY_SSID=duffy_rtn[1]
+                }
+
+                stage ("setup"){
+                    synctoduffynode "centos-7${arch}.ks"
+                    synctoduffynode "containerbuild.sh"
+
+                    onmyduffynode "yum -y install docker lorax anaconda-tui"
+                }
+
+                stage("build boot.iso"){
+                    onmyduffynode "./containerbuild.sh centos-7${arch}.ks"
+                }
+
+                stage("tag the container"){
+                    onmyduffynode "cat /var/tmp/containers/*/centos-7-docker.tar.xz | docker import - centos:7"
+                    onmyduffynode "docker tag centos:7 centos:centos7"
+                    onmyduffynode "docker tag centos:7 centos:centos7.6.1810"
+                    onmyduffynode "docker tag centos:7 centos:7.6.1810"
+                    onmyduffynode "docker tag centos:7 centos:latest"
+                }
+
+                stage("push the container"){
+                    // Nothing here for now until we figure out credentials
+                }
+            } catch (e) {
+                currentBuild.result = "FAILURE"
+                throw e
+            } finally {
+                stage("Cleanup"){
+                    sh 'cico node done ${env.SSID}'
+                }
+            }
+        }
+    }
+}
+
+c6arches.each { arch -> 
+}
+
+node(''){ // We need to run this on our own executor
+
+    stage('Checkout'){
+        checkout scm
+    }
+
+    stage('Build'){
+        parallel stages
+    }
+
+}
