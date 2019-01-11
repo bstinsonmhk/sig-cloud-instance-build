@@ -2,6 +2,22 @@ def c7arches = ["x86_64", "aarch64", "armhfp", "i386", "ppc64le"]
 def c6arches = ["x86_64", "i386"]
 def stages[:]
 
+def onmyduffynode(script){
+    ansiColor('xterm'){
+        timestamps{
+            sh 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -l root ${DUFFY_NODE}.ci.centos.org -t \"export REPO=${REPO}; export BRANCH=${BRANCH};\" "' + script + '"'
+        }
+    }
+}
+
+def syncfromduffynode(rsyncpath){
+    sh 'rsync -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -l root " -Ha --include=' +  rsyncpath +  " ${DUFFY_NODE}.ci.centos.org:~/ ./"
+}
+
+def synctoduffynode(rsyncpath){
+    sh 'rsync -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -l root " -Ha --include=' +  rsyncpath +  " ./ ${DUFFY_NODE}.ci.centos.org:~/"
+}
+
 c7arches.each { arch -> 
     stages["c7-$arch"] = {
         stage("c7-$arch") {
@@ -53,7 +69,7 @@ c7arches.each { arch ->
 c6arches.each { arch -> 
 }
 
-node(''){ // We need to run this on our own executor
+node('sig-cloudinstance'){ // We need to run this on our own executor
 
     stage('Checkout'){
         checkout scm
